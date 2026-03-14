@@ -140,7 +140,14 @@ body::before {
    Title / Card Gradients
    ======================= */
 .st-title-gradient {
-  background: linear-gradient(90deg, #a855f7 0%, #fbbf24 50%, #a855f7 100%);
+  background: linear-gradient(
+    90deg,
+    #5b21b6 0%,
+    #7e22ce 24%,
+    #f59e0b 50%,
+    #7e22ce 76%,
+    #5b21b6 100%
+  );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -154,8 +161,8 @@ body::before {
 
 /* Glow effect for dramatic emphasis */
 .st-glow {
-  filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.4)) 
-          drop-shadow(0 0 24px rgba(168, 85, 247, 0.3));
+  filter: drop-shadow(0 0 13px rgba(245, 158, 11, 0.42))
+          drop-shadow(0 0 22px rgba(91, 33, 182, 0.34));
 }
 
 /* Legacy card title support (deprecated - use GradientText component instead) */
