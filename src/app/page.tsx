@@ -14,11 +14,11 @@ export default function HomePage() {
           SERRIAN TIDE
         </GradientText>
 
-        <div className="mt-10 sm:mt-12 flex justify-center">
-          <Button variant="primary" size="lg">
+        <form action="/auth" method="get" className="mt-10 sm:mt-12 flex justify-center">
+          <Button variant="primary" size="lg" type="submit">
             Enter Your imagination
           </Button>
-        </div>
+        </form>
       </section>
     </main>
   );
