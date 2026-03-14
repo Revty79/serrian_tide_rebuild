@@ -41,11 +41,15 @@ export const SYSTEM_ROLE_DEFINITIONS: SystemRoleDefinition[] = [
 ];
 
 export const ALL_ROLE_IDS = SYSTEM_ROLE_DEFINITIONS.map((role) => role.id);
+const ROLE_NAME_BY_ID = new Map(
+  SYSTEM_ROLE_DEFINITIONS.map((role) => [role.id, role.name])
+);
 
 export function normalizeRoleId(value: string): string {
   return value.trim().toLowerCase();
 }
 
 export function formatUserRole(roleId: string): string {
-  return normalizeRoleId(roleId || DEFAULT_ROLE_ID);
+  const normalized = normalizeRoleId(roleId || DEFAULT_ROLE_ID);
+  return ROLE_NAME_BY_ID.get(normalized) ?? normalized;
 }

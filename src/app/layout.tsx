@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { NavigationPixie } from "@/components/NavigationPixie";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,7 +19,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className="theme-void">
-      <body>{children}</body>
+      <body>
+        {children}
+        <NavigationPixie />
+      </body>
     </html>
   );
 }

@@ -56,12 +56,34 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const [targetUser, adminCount] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, roleId: true },
+    }),
+    prisma.user.count({
+      where: { roleId: ADMIN_ROLE_ID },
+    }),
+  ]);
+
+  if (!targetUser) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+
+  const removingLastAdmin =
+    targetUser.roleId === ADMIN_ROLE_ID &&
+    roleInput !== ADMIN_ROLE_ID &&
+    adminCount <= 1;
+
+  if (removingLastAdmin) {
+    return NextResponse.json(
+      { error: "Cannot remove the last admin account." },
+      { status: 400 }
+    );
+  }
+
   const isAdmin = actor.roleId === ADMIN_ROLE_ID;
   if (!isAdmin) {
-    const adminCount = await prisma.user.count({
-      where: { roleId: ADMIN_ROLE_ID },
-    });
-
     const isBootstrapRequest =
       adminCount === 0 && actor.id === userId && roleInput === ADMIN_ROLE_ID;
 
