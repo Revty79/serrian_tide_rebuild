@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ensureSystemRoles } from "@/lib/role-db";
-import { ADMIN_ROLE_ID, normalizeRoleId } from "@/lib/roles";
+import { ADMIN_ROLE_ID, canonicalizeRoleId } from "@/lib/roles";
 import { getCurrentUser } from "@/lib/session";
 
 type RoleUpdateBody = {
@@ -28,7 +28,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const userId = asString(body.userId).trim();
-  const roleInput = normalizeRoleId(asString(body.role));
+  const roleInput = canonicalizeRoleId(asString(body.role));
 
   if (!userId) {
     return NextResponse.json({ error: "userId is required." }, { status: 400 });

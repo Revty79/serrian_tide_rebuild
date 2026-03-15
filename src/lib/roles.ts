@@ -1,6 +1,10 @@
 export const DEFAULT_ROLE_ID = "free_user";
 export const ADMIN_ROLE_ID = "admin";
 
+const LEGACY_ROLE_ALIASES: Record<string, string> = {
+  free: DEFAULT_ROLE_ID,
+};
+
 export type SystemRoleDefinition = {
   id: string;
   name: string;
@@ -49,7 +53,12 @@ export function normalizeRoleId(value: string): string {
   return value.trim().toLowerCase();
 }
 
+export function canonicalizeRoleId(value: string | null | undefined): string {
+  const normalized = normalizeRoleId(value ?? DEFAULT_ROLE_ID);
+  return LEGACY_ROLE_ALIASES[normalized] ?? normalized;
+}
+
 export function formatUserRole(roleId: string): string {
-  const normalized = normalizeRoleId(roleId || DEFAULT_ROLE_ID);
+  const normalized = canonicalizeRoleId(roleId || DEFAULT_ROLE_ID);
   return ROLE_NAME_BY_ID.get(normalized) ?? normalized;
 }

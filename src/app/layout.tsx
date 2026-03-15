@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { NavigationPixie } from "@/components/NavigationPixie";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,8 +21,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="theme-void">
       <body>
-        {children}
-        <NavigationPixie />
+        <ThemeProvider>
+          {children}
+          <NavigationPixie />
+        </ThemeProvider>
       </body>
     </html>
   );

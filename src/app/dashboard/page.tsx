@@ -4,8 +4,11 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { GradientText } from "@/components/GradientText";
 import { LogoutButton } from "@/components/auth/LogoutButton";
-import { ADMIN_ROLE_ID, formatUserRole } from "@/lib/roles";
+import { getRoleCapabilities } from "@/lib/authorization";
+import { formatUserRole } from "@/lib/roles";
 import { getCurrentUser } from "@/lib/session";
+
+type DashboardCapability = "canAccessSourceForge";
 
 type DashboardRealm = {
   title: string;
@@ -13,28 +16,33 @@ type DashboardRealm = {
   summary: string;
   accent: string;
   cta: string;
+  href?: string;
+  requiredCapability?: DashboardCapability;
 };
 
 const DASHBOARD_REALMS: DashboardRealm[] = [
   {
     title: "Source Forge",
     realm: "world_builder",
-    summary: "Build worlds, cultures, factions, and timelines for your campaigns.",
+    summary:
+      "Open the Source Forge hub to manage world tools, timeline setup, and core builder workflows.",
     accent: "bg-violet-400/25",
     cta: "Open Source Forge",
-  },
-  {
-    title: "Players' Realm",
-    realm: "players_realm",
-    summary: "Create characters, manage sheets, and track session progression.",
-    accent: "bg-emerald-400/25",
-    cta: "Enter Realm",
+    href: "/source-forge",
+    requiredCapability: "canAccessSourceForge",
   },
   {
     title: "Gods' Realm",
     realm: "gods_realm",
     summary: "Design campaign arcs, encounters, and story-driving lore anchors.",
     accent: "bg-amber-400/25",
+    cta: "Enter Realm",
+  },
+  {
+    title: "Players' Realm",
+    realm: "players_realm",
+    summary: "Create characters, manage sheets, and track session progression.",
+    accent: "bg-emerald-400/25",
     cta: "Enter Realm",
   },
   {
@@ -57,6 +65,7 @@ const DASHBOARD_REALMS: DashboardRealm[] = [
     summary: "Explore marketplace tools, packs, and future community modules.",
     accent: "bg-indigo-400/25",
     cta: "Visit Bazaar",
+    requiredCapability: "canAccessSourceForge",
   },
 ];
 
@@ -76,7 +85,10 @@ export default async function DashboardPage() {
     redirect("/auth");
   }
 
-  const isAdmin = user.roleId === ADMIN_ROLE_ID;
+  const capabilities = getRoleCapabilities(user.roleId);
+  const visibleRealms = DASHBOARD_REALMS.filter((realm) =>
+    realm.requiredCapability ? capabilities[realm.requiredCapability] : true
+  );
 
   return (
     <main className="min-h-screen px-6 py-10">
@@ -105,7 +117,7 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link href={getComingSoonHref("profile", "profile_management")}>
+            <Link href="/profile">
               <Button variant="secondary" size="sm">
                 Profile
               </Button>
@@ -115,7 +127,7 @@ export default async function DashboardPage() {
         </header>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {DASHBOARD_REALMS.map((realm) => (
+          {visibleRealms.map((realm) => (
             <Card
               key={realm.realm}
               padded={false}
@@ -124,16 +136,23 @@ export default async function DashboardPage() {
               <div className={`mb-3 h-10 w-10 rounded-xl ${realm.accent}`} />
               <h2 className="font-portcullion text-2xl text-amber-200">{realm.title}</h2>
               <p className="mt-2 min-h-14 text-sm text-slate-300">{realm.summary}</p>
-              <div className="mt-4">
-                <Link href={getComingSoonHref(realm.realm, realm.title)}>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href={realm.href ?? getComingSoonHref(realm.realm, realm.title)}>
                   <Button size="sm">{realm.cta}</Button>
                 </Link>
+                {realm.realm === "bazaar" && capabilities.canPublish ? (
+                  <Link href={getComingSoonHref("bazaar", "publish")}>
+                    <Button variant="secondary" size="sm">
+                      Publish
+                    </Button>
+                  </Link>
+                ) : null}
               </div>
             </Card>
           ))}
         </div>
 
-        {isAdmin ? (
+        {capabilities.canSeeAdmin ? (
           <Card
             padded={false}
             className="mt-6 rounded-3xl border border-red-400/40 bg-red-950/20 p-5 shadow-xl backdrop-blur"

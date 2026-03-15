@@ -2,22 +2,46 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getRoleCapabilities } from "@/lib/authorization";
 
 type PixieLink = {
   href: string;
   label: string;
 };
 
-const PIXIE_LINKS: PixieLink[] = [
+type ProfileMeResponse = {
+  ok?: boolean;
+  user?: {
+    roleId?: string | null;
+  };
+};
+
+const BASE_PIXIE_LINKS: PixieLink[] = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/coming-soon?realm=world_builder&tool=source_forge&back=/dashboard", label: "Source Forge" },
-  { href: "/coming-soon?realm=players_realm&tool=character_hub&back=/dashboard", label: "Players' Realm" },
-  { href: "/coming-soon?realm=gods_realm&tool=campaign_control&back=/dashboard", label: "Gods' Realm" },
-  { href: "/coming-soon?realm=astral_gate&tool=vtt_gateway&back=/dashboard", label: "The Astral Gate" },
-  { href: "/coming-soon?realm=bazaar&tool=marketplace&back=/dashboard", label: "The Bazaar" },
-  { href: "/coming-soon?realm=profile&tool=profile_settings&back=/dashboard", label: "Profile" },
+  {
+    href: "/coming-soon?realm=players_realm&tool=character_hub&back=/dashboard",
+    label: "Players' Realm",
+  },
+  {
+    href: "/coming-soon?realm=gods_realm&tool=campaign_control&back=/dashboard",
+    label: "Gods' Realm",
+  },
+  {
+    href: "/coming-soon?realm=astral_gate&tool=vtt_gateway&back=/dashboard",
+    label: "The Astral Gate",
+  },
+  { href: "/coming-soon?realm=free_tools&tool=utilities&back=/dashboard", label: "Free Tools" },
+  { href: "/profile", label: "Profile" },
 ];
+
+const SOURCE_FORGE_LINK: PixieLink = { href: "/source-forge", label: "Source Forge" };
+const TOOLBOX_LINK: PixieLink = { href: "/worldbuilder/toolbox", label: "Toolbox" };
+const BAZAAR_LINK: PixieLink = {
+  href: "/coming-soon?realm=bazaar&tool=marketplace&back=/dashboard",
+  label: "The Bazaar",
+};
+const ADMIN_LINK: PixieLink = { href: "/admin", label: "Admin Console" };
 
 const HIDDEN_ROUTES = ["/auth", "/forgot-password", "/reset-password"];
 
@@ -33,6 +57,41 @@ export function NavigationPixie() {
   const pathname = usePathname() ?? "";
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [roleId, setRoleId] = useState<string | null>(null);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadRole() {
+      try {
+        const response = await fetch("/api/profile/me", { cache: "no-store" });
+        if (!response.ok) {
+          if (active) {
+            setRoleId(null);
+            setRoleLoaded(true);
+          }
+          return;
+        }
+
+        const data = (await response.json().catch(() => null)) as ProfileMeResponse | null;
+        if (active) {
+          setRoleId(data?.ok ? data?.user?.roleId ?? null : null);
+          setRoleLoaded(true);
+        }
+      } catch {
+        if (active) {
+          setRoleId(null);
+          setRoleLoaded(true);
+        }
+      }
+    }
+
+    void loadRole();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -47,15 +106,36 @@ export function NavigationPixie() {
       }
     }
 
+    if (!open) {
+      return;
+    }
+
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [open]);
 
-  if (HIDDEN_ROUTES.includes(pathname)) {
+  const capabilities = useMemo(() => getRoleCapabilities(roleId), [roleId]);
+  const links = useMemo(() => {
+    const nextLinks = [...BASE_PIXIE_LINKS];
+
+    if (capabilities.canAccessSourceForge) {
+      nextLinks.splice(1, 0, SOURCE_FORGE_LINK);
+      nextLinks.splice(2, 0, TOOLBOX_LINK);
+      nextLinks.push(BAZAAR_LINK);
+    }
+
+    if (capabilities.canSeeAdmin) {
+      nextLinks.push(ADMIN_LINK);
+    }
+
+    return nextLinks;
+  }, [capabilities.canAccessSourceForge, capabilities.canSeeAdmin]);
+
+  if (HIDDEN_ROUTES.includes(pathname) || !roleLoaded || !roleId) {
     return null;
   }
 
@@ -106,7 +186,7 @@ export function NavigationPixie() {
           <p className="mt-1 text-xs text-zinc-300">Where to next, dreamer?</p>
 
           <div className="mt-3 max-h-[70vh] space-y-1.5 overflow-auto pr-1">
-            {PIXIE_LINKS.map((link) => (
+            {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -121,6 +201,11 @@ export function NavigationPixie() {
                 {link.label}
               </Link>
             ))}
+            {!capabilities.canAccessSourceForge ? (
+              <p className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-xs text-zinc-500">
+                Source Forge is locked for your role.
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}

@@ -18,8 +18,28 @@ model User {
   updatedAt    DateTime             @updatedAt
   sessions     Session[]
   resetTokens  PasswordResetToken[]
+  skills       Skill[]
+  calendars    Calendar[]
+  npcs         Npc[]
+  galaxyWorlds GalaxyWorld[]
+  galaxyEras   GalaxyEra[]
+  galaxySettings GalaxySetting[]
+  galaxyMarkers  GalaxyMarker[]
+  preferences  UserPreference?
 
   @@index([roleId])
+}
+
+model UserPreference {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme           String   @default("void")
+  backgroundImage String   @default("nebula.png")
+  gearImage       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("user_preferences")
 }
 
 model Role {
@@ -44,14 +64,276 @@ model Session {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model Skill {
+  id                 String                      @id @db.VarChar(36)
+  createdById        String                      @map("created_by") @db.VarChar(36)
+  createdBy          User                        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name               String                      @db.VarChar(255)
+  type               String                      @default("standard") @db.VarChar(50)
+  tier               Int?
+  primaryAttribute   String                      @default("NA") @map("primary_attribute") @db.VarChar(10)
+  secondaryAttribute String                      @default("NA") @map("secondary_attribute") @db.VarChar(10)
+  definition         String?
+  parentId           String?                     @map("parent_id") @db.VarChar(36)
+  parent2Id          String?                     @map("parent2_id") @db.VarChar(36)
+  parent3Id          String?                     @map("parent3_id") @db.VarChar(36)
+  isFree             Boolean                     @default(false) @map("is_free")
+  isPublished        Boolean                     @default(false) @map("is_published")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  updatedAt          DateTime                    @default(now()) @map("updated_at")
+  magicDetails       SkillMagicDetail[]
+  specialDetails     SkillSpecialAbilityDetail[]
+
+  @@index([createdById], map: "idx_skills_created_by")
+  @@index([type], map: "idx_skills_type")
+  @@index([tier], map: "idx_skills_tier")
+  @@map("skills")
+}
+
+model SkillMagicDetail {
+  id             String   @id @db.VarChar(36)
+  skillId        String   @map("skill_id") @db.VarChar(36)
+  skill          Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skillName      String?  @map("skill_name") @db.VarChar(255)
+  tradition      String?  @db.VarChar(100)
+  tier2Path      String?  @map("tier2_path") @db.VarChar(100)
+  containersJson Json?    @map("containers_json")
+  modifiersJson  Json?    @map("modifiers_json")
+  manaCost       Int?     @map("mana_cost")
+  castingTime    Int?     @map("casting_time")
+  masteryLevel   Int?     @map("mastery_level")
+  notes          String?
+  flavorLine     String?  @map("flavor_line")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@index([skillId], map: "idx_magic_type_details_skill_id")
+  @@map("magic_type_details")
+}
+
+model SkillSpecialAbilityDetail {
+  id             String   @id @db.VarChar(36)
+  skillId        String   @map("skill_id") @db.VarChar(36)
+  skill          Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  abilityType    String?  @map("ability_type") @db.VarChar(100)
+  scalingMethod  String?  @map("scaling_method") @db.VarChar(100)
+  prerequisites  String?
+  scalingDetails String?  @map("scaling_details")
+  stage1Tag      String?  @map("stage1_tag") @db.VarChar(255)
+  stage1Desc     String?  @map("stage1_desc")
+  stage1Points   String?  @map("stage1_points") @db.VarChar(50)
+  stage2Tag      String?  @map("stage2_tag") @db.VarChar(255)
+  stage2Desc     String?  @map("stage2_desc")
+  stage2Points   String?  @map("stage2_points") @db.VarChar(50)
+  stage3Tag      String?  @map("stage3_tag") @db.VarChar(255)
+  stage3Desc     String?  @map("stage3_desc")
+  stage4Tag      String?  @map("stage4_tag") @db.VarChar(255)
+  stage4Desc     String?  @map("stage4_desc")
+  finalTag       String?  @map("final_tag") @db.VarChar(255)
+  finalDesc      String?  @map("final_desc")
+  add1Tag        String?  @map("add1_tag") @db.VarChar(255)
+  add1Desc       String?  @map("add1_desc")
+  add2Tag        String?  @map("add2_tag") @db.VarChar(255)
+  add2Desc       String?  @map("add2_desc")
+  add3Tag        String?  @map("add3_tag") @db.VarChar(255)
+  add3Desc       String?  @map("add3_desc")
+  add4Tag        String?  @map("add4_tag") @db.VarChar(255)
+  add4Desc       String?  @map("add4_desc")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@index([skillId], map: "idx_special_ability_details_skill_id")
+  @@map("special_ability_details")
+}
+
+model Calendar {
+  id                 String   @id @default(cuid())
+  createdById        String
+  createdBy          User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  hoursPerDay        Int      @default(24)
+  minutesPerHour     Int      @default(60)
+  daylightHours      Int      @default(12)
+  nightHours         Int      @default(10)
+  dawnDuskHours      Int      @default(2)
+  daysPerYear        Int      @default(365)
+  hasLeapYear        Boolean  @default(false)
+  leapYearFrequency  Int?
+  leapYearExceptions String?
+  leapDaysAdded      Int?
+  weekdays           Json?
+  months             Json?
+  seasons            Json?
+  astronomicalEvents Json?
+  festivals          Json?
+  isFree             Boolean  @default(false)
+  isPublished        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([name])
+}
+
+model Npc {
+  id                   String   @id @default(cuid())
+  createdById          String
+  createdBy            User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name                 String
+  alias                String?
+  importance           String?
+  role                 String?
+  race                 String?
+  occupation           String?
+  location             String?
+  timelineTag          String?
+  tags                 String?
+  age                  String?
+  gender               String?
+  descriptionShort     String?
+  appearance           String?
+  strength             Int      @default(25)
+  dexterity            Int      @default(25)
+  constitution         Int      @default(25)
+  intelligence         Int      @default(25)
+  wisdom               Int      @default(25)
+  charisma             Int      @default(25)
+  baseMovement         Int      @default(5)
+  hpTotal              Int?
+  initiative           Int?
+  armorSoak            String?
+  defenseNotes         String?
+  challengeRating      Int      @default(1)
+  skillAllocations     Json?
+  skillCheckpoint      Json?
+  isInitialSetupLocked Boolean  @default(false)
+  xpSpent              Int      @default(0)
+  xpCheckpoint         Int      @default(0)
+  personality          String?
+  ideals               String?
+  bonds                String?
+  flaws                String?
+  goals                String?
+  secrets              String?
+  backstory            String?
+  motivations          String?
+  hooks                String?
+  faction              String?
+  relationships        String?
+  attitudeTowardParty  String?
+  allies               String?
+  enemies              String?
+  affiliations         String?
+  resources            String?
+  notes                String?
+  isFree               Boolean  @default(false)
+  isPublished          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([name])
+}
+
+model GalaxyWorld {
+  id          String         @id @db.VarChar(36)
+  createdById String         @map("created_by") @db.VarChar(36)
+  createdBy   User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name        String         @db.VarChar(255)
+  description String?
+  isFree      Boolean        @default(true) @map("is_free")
+  isPublished Boolean        @default(false) @map("is_published")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @default(now()) @map("updated_at")
+  eras        GalaxyEra[]
+  settings    GalaxySetting[]
+  markers     GalaxyMarker[]
+
+  @@index([createdById], map: "idx_galaxy_worlds_created_by")
+  @@index([name], map: "idx_galaxy_worlds_name")
+  @@map("galaxy_worlds")
+}
+
+model GalaxyEra {
+  id          String         @id @db.VarChar(36)
+  worldId     String         @map("world_id") @db.VarChar(36)
+  world       GalaxyWorld    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  createdById String         @map("created_by") @db.VarChar(36)
+  createdBy   User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name        String         @db.VarChar(255)
+  description String?
+  startYear   Int?           @map("start_year")
+  endYear     Int?           @map("end_year")
+  colorHex    String?        @map("color_hex") @db.VarChar(7)
+  orderIndex  Int            @default(0) @map("order_index")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @default(now()) @map("updated_at")
+  settings    GalaxySetting[]
+  markers     GalaxyMarker[]
+
+  @@index([worldId], map: "idx_galaxy_eras_world_id")
+  @@index([worldId, orderIndex], map: "idx_galaxy_eras_world_order")
+  @@index([createdById], map: "idx_galaxy_eras_created_by")
+  @@map("galaxy_eras")
+}
+
+model GalaxySetting {
+  id          String        @id @db.VarChar(36)
+  worldId     String        @map("world_id") @db.VarChar(36)
+  world       GalaxyWorld   @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  eraId       String?       @map("era_id") @db.VarChar(36)
+  era         GalaxyEra?    @relation(fields: [eraId], references: [id], onDelete: SetNull)
+  createdById String        @map("created_by") @db.VarChar(36)
+  createdBy   User          @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name        String        @db.VarChar(255)
+  description String?
+  startYear   Int?          @map("start_year")
+  endYear     Int?          @map("end_year")
+  colorHex    String?       @map("color_hex") @db.VarChar(7)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @map("updated_at")
+  markers     GalaxyMarker[]
+
+  @@index([worldId], map: "idx_galaxy_settings_world_id")
+  @@index([eraId], map: "idx_galaxy_settings_era_id")
+  @@index([createdById], map: "idx_galaxy_settings_created_by")
+  @@map("galaxy_settings")
+}
+
+model GalaxyMarker {
+  id          String        @id @db.VarChar(36)
+  worldId     String        @map("world_id") @db.VarChar(36)
+  world       GalaxyWorld   @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  eraId       String?       @map("era_id") @db.VarChar(36)
+  era         GalaxyEra?    @relation(fields: [eraId], references: [id], onDelete: SetNull)
+  settingId   String?       @map("setting_id") @db.VarChar(36)
+  setting     GalaxySetting? @relation(fields: [settingId], references: [id], onDelete: SetNull)
+  createdById String        @map("created_by") @db.VarChar(36)
+  createdBy   User          @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name        String        @db.VarChar(255)
+  description String?
+  year        Int?
+  category    String?       @db.VarChar(100)
+  visibility  String        @default("canon") @db.VarChar(20)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @map("updated_at")
+
+  @@index([worldId, year], map: "idx_galaxy_markers_world_year")
+  @@index([eraId], map: "idx_galaxy_markers_era_id")
+  @@index([settingId], map: "idx_galaxy_markers_setting_id")
+  @@index([createdById], map: "idx_galaxy_markers_created_by")
+  @@map("galaxy_markers")
 }
