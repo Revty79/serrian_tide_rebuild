@@ -25,6 +25,16 @@ const TOOL_CARDS: ToolCard[] = [
     hoverShadow: "hover:shadow-[0_0_40px_rgba(59,130,246,0.15)]",
   },
   {
+    title: "Creatures",
+    description:
+      "Creatures and lineage systems are being rebuilt from scratch in a separate design pass.",
+    href: "/coming-soon",
+    buttonLabel: "Creatures Coming Soon",
+    iconBg: "bg-emerald-500/20",
+    dotBg: "bg-emerald-300",
+    hoverShadow: "hover:shadow-[0_0_40px_rgba(16,185,129,0.18)]",
+  },
+  {
     title: "Inventory",
     description:
       "Manage weapons, gear, artifacts, services, companions, and other world inventory foundations.",
@@ -91,8 +101,7 @@ export default function ToolboxPage() {
         >
           <p className="text-center text-sm text-zinc-200">
             <span className="font-semibold text-amber-200">In scope now:</span> Skillsets,
-            Inventory, NPCs, and Calendars. Races and Creatures are intentionally excluded for the
-            rebuild.
+            Inventory, NPCs, and Calendars. Creatures are in redesign.
           </p>
         </Card>
 

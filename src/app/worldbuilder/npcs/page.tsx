@@ -1359,9 +1359,9 @@ export default function NPCsPage() {
                             </select>
                             {races.length === 0 && (
                               <p className="mt-2 text-xs text-amber-300">
-                                No races available. Create one in{" "}
-                                <Link href="/worldbuilder/races" className="underline text-amber-200">
-                                  Race Builder
+                                No playable races available. Race builder is{" "}
+                                <Link href="/worldbuilder/coming-soon" className="underline text-amber-200">
+                                  coming soon
                                 </Link>
                                 .
                               </p>

@@ -61,6 +61,11 @@ type Skill = {
   updated_at?: string | null;
 };
 
+type TreeRow = {
+  skill: Skill;
+  depth: number;
+};
+
 function transformApiSkill(s: any): Skill {
   return {
     id: s.id,
@@ -1331,6 +1336,8 @@ export default function SkillsetsPage() {
   const [fParent, setFParent] = useState<string>(""); // Filter by parent skill ID
   const [fHasParent, setFHasParent] = useState<"" | "yes" | "no">(""); // Has any parent or not
   const [fIsFree, setFIsFree] = useState<"" | "yes" | "no">(""); // Free content filter
+  const [fCreator, setFCreator] = useState<string>(""); // Filter by creator id / mine / unassigned
+  const [listMode, setListMode] = useState<"table" | "tree">("table");
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const [pageIndex, setPageIndex] = useState<number>(0);
 
@@ -1343,6 +1350,73 @@ export default function SkillsetsPage() {
     [skills, selectedId]
   );
 
+  const skillNameById = useMemo(
+    () =>
+      new Map(
+        skills.map((s) => [String(s.id), s.name || "(unnamed)"] as const)
+      ),
+    [skills]
+  );
+
+  const creatorOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of skills) {
+      const creatorId = s.created_by?.id;
+      if (!creatorId) continue;
+      const creatorName = s.created_by?.username?.trim();
+      map.set(creatorId, creatorName || creatorId.slice(0, 8));
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [skills]);
+
+  const relatedSkillIds = useMemo(() => {
+    if (!fParent) return null;
+
+    const idToSkill = new Map(skills.map((s) => [String(s.id), s] as const));
+    if (!idToSkill.has(fParent)) return new Set<string>();
+
+    const neighbors = new Map<string, Set<string>>();
+    const connect = (a: string, b: string) => {
+      const aSet = neighbors.get(a) ?? new Set<string>();
+      aSet.add(b);
+      neighbors.set(a, aSet);
+
+      const bSet = neighbors.get(b) ?? new Set<string>();
+      bSet.add(a);
+      neighbors.set(b, bSet);
+    };
+
+    for (const s of skills) {
+      const id = String(s.id);
+      const parentIds = [s.parent_id, s.parent2_id, s.parent3_id]
+        .filter(
+          (pid): pid is string | number => pid !== null && pid !== undefined
+        )
+        .map((pid) => String(pid));
+
+      for (const parentId of parentIds) {
+        if (parentId === id || !idToSkill.has(parentId)) continue;
+        connect(id, parentId);
+      }
+    }
+
+    const visited = new Set<string>();
+    const queue: string[] = [fParent];
+    visited.add(fParent);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      for (const next of neighbors.get(current) ?? []) {
+        if (visited.has(next)) continue;
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+
+    return visited;
+  }, [skills, fParent]);
+
   const filtered = useMemo(() => {
     const q = qtext.trim().toLowerCase();
     return skills.filter((s) => {
@@ -1350,22 +1424,31 @@ export default function SkillsetsPage() {
       if (fPrimary && s.primary_attribute !== fPrimary) return false;
       if (fSecondary && s.secondary_attribute !== fSecondary) return false;
       if (fTier && tierToText(s.tier) !== fTier) return false;
-      
+
       // Parent filters
       if (fParent) {
-        const hasThisParent = 
-          String(s.parent_id) === fParent || 
-          String(s.parent2_id) === fParent || 
-          String(s.parent3_id) === fParent;
-        if (!hasThisParent) return false;
+        if (!relatedSkillIds?.has(String(s.id))) return false;
       }
-      
-      if (fHasParent === "yes" && !s.parent_id) return false;
-      if (fHasParent === "no" && s.parent_id) return false;
-      
+
+      const hasAnyParent = Boolean(s.parent_id || s.parent2_id || s.parent3_id);
+      if (fHasParent === "yes" && !hasAnyParent) return false;
+      if (fHasParent === "no" && hasAnyParent) return false;
+
       // Free content filter
       if (fIsFree === "yes" && !s.is_free) return false;
       if (fIsFree === "no" && s.is_free) return false;
+
+      // Creator filter
+      if (fCreator === "__me__" && s.created_by?.id !== currentUser?.id) return false;
+      if (fCreator === "__unassigned__" && s.created_by?.id) return false;
+      if (
+        fCreator &&
+        fCreator !== "__me__" &&
+        fCreator !== "__unassigned__" &&
+        s.created_by?.id !== fCreator
+      ) {
+        return false;
+      }
 
       if (q) {
         const hay = [
@@ -1375,6 +1458,7 @@ export default function SkillsetsPage() {
           s.secondary_attribute,
           tierToText(s.tier),
           s.definition || "",
+          s.created_by?.username || "",
         ]
           .join(" ")
           .toLowerCase();
@@ -1382,15 +1466,98 @@ export default function SkillsetsPage() {
       }
       return true;
     });
-  }, [skills, qtext, fType, fPrimary, fSecondary, fTier, fParent, fHasParent, fIsFree]);
+  }, [
+    skills,
+    qtext,
+    fType,
+    fPrimary,
+    fSecondary,
+    fTier,
+    fParent,
+    relatedSkillIds,
+    fHasParent,
+    fIsFree,
+    fCreator,
+    currentUser?.id,
+  ]);
+
+  const treeRows = useMemo<TreeRow[]>(() => {
+    const idToSkill = new Map(filtered.map((s) => [String(s.id), s]));
+    const childrenByParent = new Map<string, Skill[]>();
+    const roots: Skill[] = [];
+    const sortByTierThenName = (a: Skill, b: Skill) => {
+      const aTier = a.tier ?? 999;
+      const bTier = b.tier ?? 999;
+      if (aTier !== bTier) return aTier - bTier;
+      return a.name.localeCompare(b.name);
+    };
+
+    for (const s of filtered) {
+      const parentIds = [s.parent_id, s.parent2_id, s.parent3_id]
+        .filter((pid): pid is string | number => pid !== null && pid !== undefined)
+        .map((pid) => String(pid));
+      const parentIdInScope = parentIds.find(
+        (pid) => pid !== String(s.id) && idToSkill.has(pid)
+      );
+
+      if (!parentIdInScope) {
+        roots.push(s);
+        continue;
+      }
+
+      const existing = childrenByParent.get(parentIdInScope) ?? [];
+      existing.push(s);
+      childrenByParent.set(parentIdInScope, existing);
+    }
+
+    roots.sort(sortByTierThenName);
+    for (const children of childrenByParent.values()) {
+      children.sort(sortByTierThenName);
+    }
+
+    const out: TreeRow[] = [];
+    const visited = new Set<string>();
+    const walk = (node: Skill, depth: number, path: Set<string>) => {
+      const nodeId = String(node.id);
+      if (path.has(nodeId)) return;
+      out.push({ skill: node, depth });
+      visited.add(nodeId);
+      const nextPath = new Set(path);
+      nextPath.add(nodeId);
+      for (const child of childrenByParent.get(nodeId) ?? []) {
+        walk(child, depth + 1, nextPath);
+      }
+    };
+
+    for (const root of roots) {
+      walk(root, 0, new Set<string>());
+    }
+
+    const leftovers = filtered
+      .filter((s) => !visited.has(String(s.id)))
+      .sort(sortByTierThenName);
+    for (const orphan of leftovers) {
+      walk(orphan, 0, new Set<string>());
+    }
+
+    return out;
+  }, [filtered]);
+
+  const totalRows = listMode === "tree" ? treeRows.length : filtered.length;
 
   const pages = Math.max(
     1,
-    Math.ceil(filtered.length / Math.max(1, pageSize))
+    Math.ceil(totalRows / Math.max(1, pageSize))
   );
   const clampedIndex = Math.max(0, Math.min(pageIndex, pages - 1));
   const start = clampedIndex * pageSize;
   const pageRows = filtered.slice(start, start + pageSize);
+  const pageTreeRows = treeRows.slice(start, start + pageSize);
+  const pageRowsIsEmpty =
+    listMode === "tree" ? pageTreeRows.length === 0 : pageRows.length === 0;
+  const creatorLabel = (skill: Skill) =>
+    skill.created_by?.username?.trim() ||
+    (skill.created_by?.id ? skill.created_by.id.slice(0, 8) : "—");
 
   useEffect(() => {
     if (pageIndex >= pages) setPageIndex(Math.max(0, pages - 1));
@@ -1865,7 +2032,7 @@ export default function SkillsetsPage() {
                     setPageIndex(0);
                   }}
                 >
-                  <option value="">Filter by Parent Skill...</option>
+                  <option value="">Filter by Skill Link (parent/child)...</option>
                   {skills
                     .filter((s) => s.tier !== null && s.tier >= 1)
                     .sort((a, b) => a.name.localeCompare(b.name))
@@ -1875,6 +2042,11 @@ export default function SkillsetsPage() {
                       </option>
                     ))}
                 </select>
+                {fParent && (
+                  <p className="text-[10px] text-zinc-500">
+                    Showing selected skill plus all connected parents/children.
+                  </p>
+                )}
 
                 {/* Has Parent Filter */}
                 <select
@@ -1904,13 +2076,47 @@ export default function SkillsetsPage() {
                   <option value="no">Premium Content</option>
                 </select>
 
+                {/* Creator Filter */}
+                <select
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-zinc-100 outline-none"
+                  value={fCreator}
+                  onChange={(e) => {
+                    setFCreator(e.target.value);
+                    setPageIndex(0);
+                  }}
+                >
+                  <option value="">Creator (all)</option>
+                  {currentUser && <option value="__me__">Created by me</option>}
+                  {creatorOptions.map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                  <option value="__unassigned__">Unassigned creator</option>
+                </select>
+
+                {/* View Mode */}
+                <select
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-zinc-100 outline-none"
+                  value={listMode}
+                  onChange={(e) => {
+                    setListMode(e.target.value as "table" | "tree");
+                    setPageIndex(0);
+                  }}
+                >
+                  <option value="table">List View (table)</option>
+                  <option value="tree">Tree View (hierarchy)</option>
+                </select>
+
                 {/* Clear Advanced Filters */}
-                {(fParent || fHasParent || fIsFree) && (
+                {(fParent || fHasParent || fIsFree || fCreator || listMode !== "table") && (
                   <button
                     onClick={() => {
                       setFParent("");
                       setFHasParent("");
                       setFIsFree("");
+                      setFCreator("");
+                      setListMode("table");
                       setPageIndex(0);
                     }}
                     className="w-full text-xs text-amber-400 hover:text-amber-300 py-1 text-center"
@@ -1922,9 +2128,18 @@ export default function SkillsetsPage() {
             </details>
 
             {/* Active Filters Summary */}
-            {(qtext || fType || fTier || fPrimary || fSecondary || fParent || fHasParent || fIsFree) && (
+            {(qtext ||
+              fType ||
+              fTier ||
+              fPrimary ||
+              fSecondary ||
+              fParent ||
+              fHasParent ||
+              fIsFree ||
+              fCreator ||
+              listMode !== "table") && (
               <div className="text-xs text-zinc-400 pt-1 border-t border-white/10">
-                Showing {filtered.length} of {skills.length} skills
+                Showing {totalRows} of {skills.length} skills
                 <button
                   onClick={() => {
                     setQtext("");
@@ -1935,6 +2150,8 @@ export default function SkillsetsPage() {
                     setFParent("");
                     setFHasParent("");
                     setFIsFree("");
+                    setFCreator("");
+                    setListMode("table");
                     setPageIndex(0);
                   }}
                   className="ml-2 text-red-400 hover:text-red-300"
@@ -1951,7 +2168,7 @@ export default function SkillsetsPage() {
               <span>
                 {loading
                   ? "Loading skills…"
-                  : `Results: ${filtered.length}`}
+                  : `Results: ${totalRows} (${listMode === "tree" ? "tree" : "table"})`}
               </span>
               <div className="flex items-center gap-1">
                 <span>Page size</span>
@@ -1977,7 +2194,7 @@ export default function SkillsetsPage() {
                 <div className="px-3 py-6 text-center text-xs text-zinc-500">
                   Loading…
                 </div>
-              ) : pageRows.length === 0 ? (
+              ) : pageRowsIsEmpty ? (
                 <div className="px-3 py-6 text-center text-xs text-zinc-500">
                   {skills.length
                     ? "No results."
@@ -1992,28 +2209,27 @@ export default function SkillsetsPage() {
                       <th className="px-3 py-1">Tier</th>
                       <th className="px-3 py-1">Attr</th>
                       <th className="px-3 py-1">Parents</th>
+                      <th className="px-3 py-1">Creator</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pageRows.map((s) => {
-                      const parents = [
-                        s.parent_id,
-                        s.parent2_id,
-                        s.parent3_id,
-                      ]
-                        .map(
-                          (pid) =>
-                            skills.find(
-                              (x) => String(x.id) === String(pid)
-                            )?.name
-                        )
+                    {(listMode === "tree"
+                      ? pageTreeRows.map((row) => ({ skill: row.skill, depth: row.depth }))
+                      : pageRows.map((skill) => ({ skill, depth: 0 }))
+                    ).map(({ skill: s, depth }) => {
+                      const isFocusSkill = fParent && String(s.id) === fParent;
+                      const isSelected = selectedId === String(s.id);
+                      const parents = [s.parent_id, s.parent2_id, s.parent3_id]
+                        .map((pid) => (pid ? skillNameById.get(String(pid)) : ""))
                         .filter(Boolean)
                         .join(", ");
                       return (
                         <tr
-                          key={String(s.id)}
+                          key={listMode === "tree" ? `${String(s.id)}:${depth}` : String(s.id)}
                           className={`border-t border-white/5 cursor-pointer hover:bg-white/5 ${
-                            selectedId === String(s.id)
+                            isFocusSkill
+                              ? "bg-amber-300/20 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.45)]"
+                              : isSelected
                               ? "bg-white/10"
                               : ""
                           }`}
@@ -2023,7 +2239,25 @@ export default function SkillsetsPage() {
                           }}
                         >
                           <td className="px-3 py-1.5">
-                            {s.name || "(unnamed)"}
+                            <div
+                              className="flex items-center gap-1"
+                              style={
+                                listMode === "tree"
+                                  ? { paddingLeft: `${depth * 14}px` }
+                                  : undefined
+                              }
+                            >
+                              {listMode === "tree" && depth > 0 && (
+                                <span className="text-zinc-500">↳</span>
+                              )}
+                              <span
+                                className={
+                                  isFocusSkill ? "font-semibold text-amber-200" : ""
+                                }
+                              >
+                                {s.name || "(unnamed)"}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-3 py-1.5">{s.type}</td>
                           <td className="px-3 py-1.5">
@@ -2038,6 +2272,7 @@ export default function SkillsetsPage() {
                           <td className="px-3 py-1.5">
                             {parents || "—"}
                           </td>
+                          <td className="px-3 py-1.5">{creatorLabel(s)}</td>
                         </tr>
                       );
                     })}
